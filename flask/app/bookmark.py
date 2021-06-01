@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, make_response
 from flask.views import MethodView
 from mysql.connector import Error
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from .util import register_api
+from .util import register_api, extractDataToDictionary
 from .db import get_db
 
 ID = 4
@@ -18,8 +18,6 @@ class Bookmark(MethodView):
     """ Get bookmark list from database"""
     if bookmark_id is None:
         user = get_jwt_identity()
-        
-        print(user)
         
         cnx = get_db()
         cur = cnx.cursor()
@@ -37,7 +35,36 @@ class Bookmark(MethodView):
         
         return jsonify({'result': bookmarks})
     else:
-        return jsonify(list(filter(lambda x: x['bookmark_id'] == bookmark_id, FAKE_DATA)))
+        cnx = get_db()
+        cur = cnx.cursor()
+        
+        try:
+          query = "SELECT * FROM bookmark WHERE id = %s"
+          cur.execute(query, (bookmark_id,))
+        except Error as err:
+          print(err)
+        
+        data = cur.fetchone()
+        
+        if data is None:
+          return make_response(
+            jsonify({
+              'type': 'error',
+              'status': 400,
+              'message': 'Bookmark not found'
+            }), 400
+          )
+          
+        bookmark = extractDataToDictionary(data, cur)
+        
+        return make_response(
+          jsonify({
+            'type': 'success',
+            'status': 200,
+            'message': 'Bookmark found',
+            'result': bookmark
+          })
+        )
 
   def post(self):
     """Add bookmark url to database

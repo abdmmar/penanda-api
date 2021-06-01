@@ -3,15 +3,21 @@ from mysql.connector import connect, Error, errorcode
 from bcrypt import hashpw, gensalt
 from operator import itemgetter
 from uuid import uuid4
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
 
 USER = os.getenv('MYSQL_USER') if os.getenv('MYSQL_USER') else 'root'
-HOST =os.getenv('MYSQL_HOST') if os.getenv('MYSQL_HOST') else '127.0.0.1'
+HOST = os.getenv('MYSQL_HOST') if os.getenv('MYSQL_HOST') else '127.0.0.1'
+PASSWORD = os.getenv('MYSQL_PASSWORD') if os.getenv('MYSQL_PASSWORD') else ''
+PORT = os.getenv('MYSQL_PORT') if os.getenv('MYSQL_PORT') else 3307
+DB = os.getenv('MYSQL_DB') if os.getenv('MYSQL_DB') else 'bookmark'
 
 config = {
   'user': USER,
-  'password': '',
+  'password': PASSWORD,
   'host': HOST,
-  'port': 3306,
+  'port': PORT,
 }
 
 def get_db():
@@ -21,7 +27,7 @@ def get_db():
       cnx: connect() object
   """  
   try:
-    config['database'] = 'bookmark'
+    config['database'] = DB
     config['pool_name'] = 'bookmark_pool'
     config['pool_size'] = 20
     cnx = connect(**config)
@@ -56,7 +62,7 @@ def init_db():
   
   # Create Bookmark Table
   cur.execute('DROP TABLE IF EXISTS bookmark')
-  cur.execute('CREATE TABLE bookmark (id VARCHAR(50) PRIMARY KEY, author_id VARCHAR(50) NOT NULL, created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, title VARCHAR(255) NOT NULL, url VARCHAR(255) NOT NULL, img VARCHAR(255) NULL, description VARCHAR(255) NULL, FOREIGN KEY (author_id) REFERENCES user (id))')
+  cur.execute('CREATE TABLE bookmark (id INTEGER PRIMARY KEY AUTO_INCREMENT, author_id VARCHAR(50) NOT NULL, created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, title VARCHAR(255) NOT NULL, url VARCHAR(255) NOT NULL, img VARCHAR(255) NULL, description VARCHAR(255) NULL, FOREIGN KEY (author_id) REFERENCES user (id))')
   cnx.commit()
   
   cur.close()
@@ -71,14 +77,12 @@ def seed():
   users = [{ 'id': user_id, 'email': 'tabi@gmail.com', 'name': 'tabi', 'password': hash_password }]
   bookmarks = [
     {
-      'id': str(uuid4()),
       'author_id': user_id,
       'title': 'Atomic Habits',
       'url': 'example.com',
       'img': 'https://i.redd.it/fyqoq0jzoht21.jpg',
       'description': 'Perubahan kecil yang memberikan hasil luar biasa'},
     {
-      'id': str(uuid4()),
       'author_id': user_id,
       'title': 'Sebuah Seni Untuk Bersikap Bodo Amat',
       'url': 'example.com',
@@ -101,9 +105,9 @@ def seed():
   
   # Seed Bookmark Table
   for bookmark in bookmarks:
-    bookmark_id, title, url, img, description = itemgetter('id', 'title', 'url', 'img', 'description')(bookmark)
-    query = "INSERT INTO bookmark(id, author_id, title, url, img, description) VALUES(%s, %s, %s, %s, %s, %s)"
-    cur.execute(query, (bookmark_id, user_id, title, url, img, description))
+    title, url, img, description = itemgetter('title', 'url', 'img', 'description')(bookmark)
+    query = "INSERT INTO bookmark(author_id, title, url, img, description) VALUES(%s, %s, %s, %s, %s)"
+    cur.execute(query, (user_id, title, url, img, description))
     cnx.commit()
   
   print('Insert into table bookmark success!')

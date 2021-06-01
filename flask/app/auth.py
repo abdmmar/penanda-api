@@ -1,18 +1,21 @@
 from flask import Blueprint, jsonify, make_response, request
 from flask.views import MethodView
 from mysql.connector import Error
-from .db import get_db
 from bcrypt import checkpw, gensalt, hashpw
 from flask_jwt_extended import create_access_token
+from uuid import uuid4
+
+from .db import get_db
+from .util import extractDataToDictionary
 
 register_bp = Blueprint('register', __name__)
 login_bp = Blueprint('login', __name__)
 
 class Register(MethodView):
   def post(self):   
-    email = request.form['email']
-    name = request.form['name']
-    password = request.form['password']
+    email = request.form.get('email')
+    name = request.form.get('name')
+    password = request.form.get('password')
     cnx = get_db()
     cur = cnx.cursor()
     error = None
@@ -30,10 +33,10 @@ class Register(MethodView):
       error = f"Email {email} is already registered!"
     
     if error is None:
-      query = 'INSERT INTO user (email, name, password) VALUES (%s, %s, %s)'
+      query = 'INSERT INTO user (id, email, name, password) VALUES (%s, %s, %s, %s)'
       hash_password = hashpw(password.encode('utf-8'), gensalt())
       
-      cur.execute(query, (email, name, hash_password))
+      cur.execute(query, (str(uuid4()), email, name, hash_password))
       cnx.commit()
       cur.close()
       
@@ -100,7 +103,6 @@ class Login(MethodView):
         }), 400
       )
     
-    # token = encode({'id': user['id']}, getenv("SECRET_KEY"), algorithm="HS256")
     token = create_access_token(identity={'id': user['id'], 'email': user['email']})
     return make_response(
       jsonify({
@@ -116,21 +118,3 @@ register_bp.add_url_rule('/register/', view_func=register_view)
 
 login_view = Login.as_view('login')
 login_bp.add_url_rule('/login/', view_func=login_view)
-
-def extractDataToDictionary(data, cursor):
-  """merge row and data to be dictionary
-
-  Args:
-      data (tuple): tuple of data, ex: (1, 'budi', '1234')
-      cursor (cursor()): get every row ex: ('id', 'name', 'password') from the last fetch
-
-  Returns:
-      data: data as dictionary ex: {'id': 1, 'name': 'budi', 'password': '1234'}
-  """  
-  row = [x[0] for x in cursor.description]
-  user = {}
-  
-  for i in range(len(data)):
-    user[row[i]] = data[i]
-  
-  return user

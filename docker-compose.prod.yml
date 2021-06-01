@@ -2,7 +2,7 @@ version: "3.3"
 
 services:
   server:
-    container_name: flask_prod
+    container_name: penanda-api
     build: 
       context: ./flask
       dockerfile: Dockerfile.prod

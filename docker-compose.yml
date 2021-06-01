@@ -3,10 +3,25 @@ version: "3.3"
 services:
 
   server_dev:
-    container_name: flask_dev
+    container_name: penanda-api-dev
     build: 
       context: ./flask
       dockerfile: Dockerfile
     restart: always
     ports: 
       - "5000:5000"
+  
+  db_dev:
+    image: mysql:5.7
+    ports:
+      - 3307:3307 
+    environment: 
+      - MYSQL_ALLOW_EMPTY_PASSWORD=true
+      - MYSQL_TCP_PORT=3307
+    volumes: 
+      - mysql_dev:/var/lib/mysql
+      - mysql_config_dev:/etc/mysql
+
+volumes: 
+  mysql_dev:
+  mysql_config_dev:

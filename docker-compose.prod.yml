@@ -1,0 +1,28 @@
+version: "3.3"
+
+services:
+  server:
+    container_name: flask_prod
+    build: 
+      context: ./flask
+      dockerfile: Dockerfile.prod
+    restart: always
+    ports: 
+      - 5555:5555
+    volumes: 
+      - ./:/flask
+  
+  db:
+    image: mysql:5.7
+    ports:
+      - 3306:3306
+    environment: 
+      - MYSQL_ALLOW_EMPTY_PASSWORD=true
+    volumes: 
+      - mysql:/var/lib/mysql
+      - mysql_config:/etc/mysql
+  
+volumes: 
+  mysql:
+  mysql_config:
+  

@@ -1,0 +1,22 @@
+FROM python:3.9.5-alpine
+
+RUN pip install pipenv
+
+WORKDIR /app
+
+ENV MYSQL_USER root
+ENV MYSQL_HOST db
+
+COPY Pipfile* .
+
+RUN pipenv lock --keep-outdated --requirements > requirements.txt
+RUN pip install -r requirements.txt
+
+# RUN pip install pipenv && \
+#     pipenv install --dev --system --deploy --ignore-pipfile
+
+ADD . .
+
+RUN pip install .
+
+CMD [ "waitress-serve", "--call", "--port=5555", "app:create_app"]

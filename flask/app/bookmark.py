@@ -1,7 +1,11 @@
+from operator import ge
 from flask import Blueprint, jsonify, request, make_response
 from flask.views import MethodView
 from mysql.connector import Error
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from metadata_parser import MetadataParser
+from shortuuid import uuid
+
 from .util import register_api, extractDataToDictionary
 from .db import get_db
 
@@ -32,6 +36,7 @@ class Bookmark(MethodView):
         bookmarks = convertListOfTuplesToArrayOfDictionary(data, cur)
         
         cur.close()
+        cnx.close()
         
         return jsonify({'result': bookmarks})
     else:
@@ -57,6 +62,9 @@ class Bookmark(MethodView):
           
         bookmark = extractDataToDictionary(data, cur)
         
+        cur.close()
+        cnx.close()
+        
         return make_response(
           jsonify({
             'type': 'success',
@@ -67,35 +75,69 @@ class Bookmark(MethodView):
         )
 
   def post(self):
-    """Add bookmark url to database
+    """Add bookmark metadata from url to database
 
     Returns:
         JSON: {type, status, message}
     """       
     url = request.form.get('url')
-    data = {'user_id': ++ID, "name": url}
+    user = get_jwt_identity()
+    user_id = user.get('id')
     
     if not url:
       return make_response(
         jsonify({
           'type': 'error', 
           'status': 400, 
-          'message': 'Name is required!'
+          'message': 'Url is required!'
           }), 400
         )
     
-    FAKE_DATA.append(data)
+    page = MetadataParser(url=url,force_doctype=True, search_head_only=False, support_malformed=True)
+    title = page.get_metadatas('title', strategy=['page', 'meta', 'og', 'twitter', 'dc'])[0] # ['string']
+    img = page.get_metadata_link('image', allow_encoded_uri=True) # Return a 'string'
+    description = page.get_metadatas('description')[0][0:254] # Returned a list ['string'] and trim max 255 char
+    type = page.get_metadatas('type')[0] # Returend a list ['string']
+    
+    if title is None:
+      title = ''
+    elif img is None:
+      img = ''
+    elif description is None:
+      description = ''
+    
+    cnx = get_db()
+    cur = cnx.cursor()
+    
+    try:
+      bookmark_id = str(uuid()[:-6])
+      query = 'INSERT INTO bookmark(id, author_id, title, url, img, description) VALUES (%s,%s,%s,%s,%s,%s)'
+      cur.execute(query, (bookmark_id, user_id, title, url, img, description))
+    except Error as err:
+      print(err)
+      
+      return make_response(
+      jsonify({
+        'type': 'error', 
+        'status': 500, 
+        'message': 'Internal server error, add bookmark failed!'
+        }), 500
+      )
+      
+    cnx.commit()
+    cur.close()
+    cnx.close()
     
     return make_response(
       jsonify({
         'type': 'success', 
         'status': 200, 
-        'message': 'User added succesfully!'
-        })
+        'message': 'Bookmark added succesfully!'
+        }), 200
       )
 
-  def delete(self, user_id):
-    if user_id is None:
+  def delete(self, bookmark_id):
+    if bookmark_id is None:
       return make_response(
         jsonify({
         'type': 'error', 
@@ -103,76 +145,104 @@ class Bookmark(MethodView):
         'message': 'Id is required!'   
         }), 400
       )
-    elif type(user_id) is not int:
+      
+    cnx = get_db()
+    cur = cnx.cursor()
+
+    try:
+      query="DELETE FROM bookmark WHERE id = %s"
+      cur.execute(query, (bookmark_id,))
+    except Error as err:
+      print(err)
+      
+      return make_response(
+      jsonify({
+        'type': 'error', 
+        'status': 500, 
+        'message': 'Internal server error, delete bookmark failed!'
+        }), 500
+      )
+    
+    cnx.commit()
+    cur.close()
+    cnx.close()
+    
+    return make_response(
+      jsonify({
+        'type': 'success', 
+        'status': 200, 
+        'message': 'Bookmark deleted succesfully!'
+      }), 200
+    )
+
+  def put(self, bookmark_id):
+    if bookmark_id is None:
       return make_response(
         jsonify({
         'type': 'error', 
         'status': 400, 
-        'message': 'Id must be number!'   
+        'message': 'Bookmark ID is required!'   
         }), 400
       )
+      
+    title = request.form.get('title')
+    url = request.form.get('url')
+    img = request.form.get('img')
+    description = request.form.get('description')
     
-    res = {
-      'type' : 'error',
-      'status' : 400,
-      'message' : 'User deleted failed!'
-    }
+    # TODO: Add URL Validation
     
-    for index, data in enumerate(FAKE_DATA, 0):
-      if data['user_id'] == user_id:
-        FAKE_DATA.pop(index)
-        res['type'] = 'success'
-        res['status'] = 200
-        res['message'] = 'User deleted successfully!'
-    
-    return make_response(jsonify(res), res.get('status'))
-
-  def put(self, user_id):
-    name = request.form['name']
-    
-    if len(name) == 0:
+    if url == '':
       return make_response(
         jsonify({
           'type': 'error', 
           'status': 400, 
-          'message': 'Name is required!'
-          }), 400
-        )
-    
-    if user_id is None:
-      return make_response(
-        jsonify({
-        'type': 'error', 
-        'status': 400, 
-        'message': 'Id is required!'   
+          'message': 'URL can\'t be empty otherwise you shouldn\'t change it'
         }), 400
       )
-    elif type(user_id) is not int:
+      
+    update_item = {'title': title, 'url': url, 'img': img, 'description': description}
+    query_set_item_list = []
+    query_set = ' '
+    
+    for keys, item in update_item.items():
+      if item is not None:
+        query_set += f'{keys}=%s, '
+        query_set_item_list.append(item)
+    
+    query_set_item_list.append(bookmark_id)
+    query_set_item = tuple(query_set_item_list)
+    
+    cnx = get_db()
+    cur = cnx.cursor()
+    
+    try:
+      query = "UPDATE bookmark SET " + query_set[:-2] + " WHERE id=%s"
+      cur.execute(query, query_set_item)
+    except Error as err:
+      print(err)
+      
       return make_response(
-        jsonify({
+      jsonify({
         'type': 'error', 
-        'status': 400, 
-        'message': 'Id must be number!'   
-        }), 400
+        'status': 500, 
+        'message': 'Internal server error, update bookmark failed!'
+        }), 500
       )
     
-    res = {
-      'type' : 'error',
-      'status' : 400,
-      'message' : 'User updated failed!'
-    }
+    cnx.commit()
+    cur.close()
+    cnx.close()
     
-    for data in FAKE_DATA:
-      if data['user_id'] == user_id:
-        data['name'] = name
-        
-        res['type'] = 'success'
-        res['status'] = 200
-        res['message'] = 'User updated successfully!'
-    
-    return make_response(jsonify(res), res.get('status'))
+    return make_response(
+      jsonify({
+        'type': 'success', 
+        'status': 200, 
+        'message': 'Bookmark updated succesfully!'
+      }), 200
+    )
 
-register_api(bp, Bookmark, "bookmark", "/bookmark/", "bookmark_id")
+register_api(bp, Bookmark, "bookmark", "/bookmark/", "bookmark_id", "string")
 
 def convertListOfTuplesToArrayOfDictionary(list_of_data, cursor):
   """Convert list of tuples to array of dictionary so it can be send as JSON properply

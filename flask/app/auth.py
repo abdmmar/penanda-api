@@ -3,7 +3,7 @@ from flask.views import MethodView
 from mysql.connector import Error
 from bcrypt import checkpw, gensalt, hashpw
 from flask_jwt_extended import create_access_token
-from uuid import uuid4
+from shortuuid import uuid
 
 from .db import get_db
 from .util import extractDataToDictionary
@@ -36,7 +36,7 @@ class Register(MethodView):
       query = 'INSERT INTO user (id, email, name, password) VALUES (%s, %s, %s, %s)'
       hash_password = hashpw(password.encode('utf-8'), gensalt())
       
-      cur.execute(query, (str(uuid4()), email, name, hash_password))
+      cur.execute(query, (str(uuid()[:-6]), email, name, hash_password))
       cnx.commit()
       cur.close()
       

@@ -2,7 +2,7 @@ import os
 from mysql.connector import connect, Error, errorcode
 from bcrypt import hashpw, gensalt
 from operator import itemgetter
-from uuid import uuid4
+from shortuuid import uuid
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -57,12 +57,12 @@ def init_db():
   
   # Create User Table
   cur.execute('DROP TABLE IF EXISTS user')
-  cur.execute('CREATE TABLE user (id VARCHAR(50) PRIMARY KEY, email VARCHAR(100) NOT NULL,name VARCHAR(100) NOT NULL, password VARCHAR(255) NOT NULL)')
+  cur.execute('CREATE TABLE user (id VARCHAR(16) PRIMARY KEY, email VARCHAR(100) NOT NULL,name VARCHAR(100) NOT NULL, password VARCHAR(255) NOT NULL)')
   cnx.commit()
   
   # Create Bookmark Table
   cur.execute('DROP TABLE IF EXISTS bookmark')
-  cur.execute('CREATE TABLE bookmark (id INTEGER PRIMARY KEY AUTO_INCREMENT, author_id VARCHAR(50) NOT NULL, created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, title VARCHAR(255) NOT NULL, url VARCHAR(255) NOT NULL, img VARCHAR(255) NULL, description VARCHAR(255) NULL, FOREIGN KEY (author_id) REFERENCES user (id))')
+  cur.execute('CREATE TABLE bookmark (id VARCHAR(16) PRIMARY KEY, author_id VARCHAR(50) NOT NULL, created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, title VARCHAR(255) NOT NULL, url VARCHAR(255) NOT NULL, img VARCHAR(255) NULL, description VARCHAR(255) NULL, FOREIGN KEY (author_id) REFERENCES user (id))')
   cnx.commit()
   
   cur.close()
@@ -73,16 +73,18 @@ def init_db():
 def seed():
   """Seed the database"""
   hash_password = hashpw("tabi".encode('utf-8'), gensalt())
-  user_id = str(uuid4())
+  user_id = str(uuid()[:-6])
   users = [{ 'id': user_id, 'email': 'tabi@gmail.com', 'name': 'tabi', 'password': hash_password }]
   bookmarks = [
     {
+      'id': str(uuid()[:-6]),
       'author_id': user_id,
       'title': 'Atomic Habits',
       'url': 'example.com',
       'img': 'https://i.redd.it/fyqoq0jzoht21.jpg',
       'description': 'Perubahan kecil yang memberikan hasil luar biasa'},
     {
+      'id': str(uuid()[:-6]),
       'author_id': user_id,
       'title': 'Sebuah Seni Untuk Bersikap Bodo Amat',
       'url': 'example.com',
@@ -105,9 +107,9 @@ def seed():
   
   # Seed Bookmark Table
   for bookmark in bookmarks:
-    title, url, img, description = itemgetter('title', 'url', 'img', 'description')(bookmark)
-    query = "INSERT INTO bookmark(author_id, title, url, img, description) VALUES(%s, %s, %s, %s, %s)"
-    cur.execute(query, (user_id, title, url, img, description))
+    bookmark_id, title, url, img, description = itemgetter('id', 'title', 'url', 'img', 'description')(bookmark)
+    query = "INSERT INTO bookmark(id, author_id, title, url, img, description) VALUES(%s, %s, %s, %s, %s, %s)"
+    cur.execute(query, (bookmark_id, user_id, title, url, img, description))
     cnx.commit()
   
   print('Insert into table bookmark success!')
